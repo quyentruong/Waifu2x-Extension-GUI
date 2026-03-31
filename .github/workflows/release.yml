@@ -79,10 +79,9 @@ jobs:
           }
           
           # Deploy Qt dependencies
-          Push-Location "release-package"
           Write-Host "Running windeployqt..."
-          windeployqt.exe --release Waifu2x-Extension-GUI.exe
-          Pop-Location
+          $targetExe = "release-package\Waifu2x-Extension-GUI.exe"
+          & windeployqt.exe --release --force --compiler-runtime --no-translations $targetExe
           
           # Copy README and LICENSE
           if (Test-Path "README.md") { Copy-Item "README.md" "release-package\" }

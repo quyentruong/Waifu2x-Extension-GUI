@@ -69,13 +69,20 @@ jobs:
           Copy-Item -Path $mainExe.FullName -Destination "artifact\" -Force
           
           # Deploy Qt dependencies
-          Push-Location "artifact"
           Write-Host "Running windeployqt..."
-          windeployqt.exe --release Waifu2x-Extension-GUI.exe
-          Pop-Location
+          $exePath = "artifact\Waifu2x-Extension-GUI.exe"
           
-          Write-Host "Artifact contents:"
-          Get-ChildItem -Path "artifact" | ForEach-Object { Write-Host "  - $($_.Name)" }
+          # Run windeployqt with verbose output and force flags
+          & windeployqt.exe --release --force --compiler-runtime --no-translations $exePath
+          
+          Write-Host "`nArtifact contents:"
+          Get-ChildItem -Path "artifact" -Recurse | ForEach-Object { 
+            if ($_.PSIsContainer) {
+              Write-Host "  [DIR]  $($_.FullName.Replace((Get-Location).Path + '\artifact\', ''))"
+            } else {
+              Write-Host "  [FILE] $($_.Name) ($($_.Length) bytes)"
+            }
+          }
         } else {
           Write-Error "Waifu2x-Extension-GUI.exe not found!"
           Write-Host "Build directory structure:"
