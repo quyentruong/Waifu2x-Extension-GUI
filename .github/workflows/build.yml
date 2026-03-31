@@ -93,11 +93,10 @@ jobs:
           
           Write-Host "`nArtifact contents:"
           Get-ChildItem -Path "artifact" -Recurse | Select-Object -First 50 | ForEach-Object { 
-            $relativePath = $_.FullName.Replace((Resolve-Path "artifact").Path, "").TrimStart('\')
             if ($_.PSIsContainer) {
-              Write-Host "  [DIR]  $relativePath"
+              Write-Host "  [DIR]  $($_.Name)"
             } else {
-              Write-Host "  [FILE] $relativePath ($($_.Length) bytes)"
+              Write-Host "  [FILE] $($_.Name) ($($_.Length) bytes)"
             }
           }
           
@@ -157,7 +156,7 @@ jobs:
               }
             }
           } else {
-            Write-Host "✓ All essential Qt files deployed successfully!"
+            Write-Host "All essential Qt files deployed successfully!"
           }
         } else {
           Write-Error "Waifu2x-Extension-GUI.exe not found!"

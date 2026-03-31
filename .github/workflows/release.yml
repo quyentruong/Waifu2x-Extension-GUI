@@ -147,7 +147,7 @@ jobs:
               }
             }
           } else {
-            Write-Host "✓ All Qt files deployed successfully!"
+            Write-Host "All Qt files deployed successfully!"
           }
           
           # Copy README and LICENSE
