@@ -58,15 +58,29 @@ jobs:
         # Create release directory
         New-Item -ItemType Directory -Force -Path "release-package"
         
-        # Find and copy executable
-        $exePath = Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Filter "Waifu2x-Extension-GUI.exe" | Select-Object -First 1
+        # Find executable
+        Write-Host "Searching for Waifu2x-Extension-GUI.exe..."
+        $exePath = Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Filter "Waifu2x-Extension-GUI.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        
+        if (-not $exePath) {
+          Write-Host "Executable not found with exact name, searching for any .exe..."
+          $allExes = Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue
+          $allExes | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+          $exePath = $allExes | Where-Object { $_.Name -like "*Waifu2x*" } | Select-Object -First 1
+        }
         
         if ($exePath) {
           Write-Host "Found executable: $($exePath.FullName)"
           Copy-Item -Path $exePath.FullName -Destination "release-package\" -Force
           
+          # Ensure it's named correctly
+          if ($exePath.Name -ne "Waifu2x-Extension-GUI.exe") {
+            Rename-Item -Path "release-package\$($exePath.Name)" -NewName "Waifu2x-Extension-GUI.exe" -Force
+          }
+          
           # Deploy Qt dependencies
           Push-Location "release-package"
+          Write-Host "Running windeployqt..."
           windeployqt.exe --release Waifu2x-Extension-GUI.exe
           Pop-Location
           
@@ -75,9 +89,11 @@ jobs:
           if (Test-Path "LICENSE") { Copy-Item "LICENSE" "release-package\" }
           
           Write-Host "Package contents:"
-          Get-ChildItem -Path "release-package" -Recurse
+          Get-ChildItem -Path "release-package" -Name
         } else {
           Write-Error "Executable not found!"
+          Write-Host "Directory structure:"
+          Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Directory | Select-Object -First 30 | ForEach-Object { Write-Host $_.FullName }
           exit 1
         }
         

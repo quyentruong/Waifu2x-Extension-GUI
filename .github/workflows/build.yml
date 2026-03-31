@@ -36,19 +36,51 @@ jobs:
         qmake Waifu2x-Extension-QT.pro
         mingw32-make -j%NUMBER_OF_PROCESSORS%
         
+    - name: Check build output
+      shell: powershell
+      run: |
+        Write-Host "=== Build output check ==="
+        Write-Host "Current directory:"
+        Get-Location
+        Write-Host "`nLooking for .exe files:"
+        Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue | ForEach-Object { 
+          Write-Host "  Found: $($_.FullName) ($($_.Length) bytes)"
+        }
+        Write-Host "`nDirectory structure:"
+        Get-ChildItem -Path "SRC_v3.41.01-beta/Waifu2x-Extension-QT" -Directory | ForEach-Object {
+          Write-Host "  - $($_.Name)"
+        }
+        
     - name: Prepare artifacts
       shell: powershell
       run: |
-        # Find the build directory
-        $buildDir = Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Directory | Where-Object { $_.Name -like "*release*" -or $_.Name -like "*debug*" } | Select-Object -First 1
+        # Find the executable
+        Write-Host "Searching for executables..."
+        $exeFiles = Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue
         
-        if ($buildDir) {
+        Write-Host "Found executables:"
+        $exeFiles | ForEach-Object { Write-Host "  - $($_.FullName)" }
+        
+        $mainExe = $exeFiles | Where-Object { $_.Name -eq "Waifu2x-Extension-GUI.exe" } | Select-Object -First 1
+        
+        if ($mainExe) {
+          Write-Host "Found main executable: $($mainExe.FullName)"
           New-Item -ItemType Directory -Force -Path "artifact"
-          Copy-Item -Path "$($buildDir.FullName)\*.exe" -Destination "artifact\" -Force
+          Copy-Item -Path $mainExe.FullName -Destination "artifact\" -Force
           
           # Deploy Qt dependencies
-          cd artifact
-          windeployqt.exe Waifu2x-Extension-GUI.exe
+          Push-Location "artifact"
+          Write-Host "Running windeployqt..."
+          windeployqt.exe --release Waifu2x-Extension-GUI.exe
+          Pop-Location
+          
+          Write-Host "Artifact contents:"
+          Get-ChildItem -Path "artifact" | ForEach-Object { Write-Host "  - $($_.Name)" }
+        } else {
+          Write-Error "Waifu2x-Extension-GUI.exe not found!"
+          Write-Host "Build directory structure:"
+          Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Directory | Select-Object -First 20 | ForEach-Object { Write-Host "  - $($_.FullName)" }
+          exit 1
         }
         
     - name: Upload build artifact
