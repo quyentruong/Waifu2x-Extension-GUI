@@ -108,7 +108,7 @@ MainWindow::MainWindow(QWidget *parent)
     QtConcurrent::run(this, &MainWindow::DeleteErrorLog_Waifu2xCaffe);//删除Waifu2xCaffe生成的错误日志
     QtConcurrent::run(this, &MainWindow::Del_TempBatFile);//删除bat文件缓存
     AutoUpdate = QtConcurrent::run(this, &MainWindow::CheckUpadte_Auto);//自动检查更新线程
-    DownloadOnlineQRCode = QtConcurrent::run(this, &MainWindow::Donate_DownloadOnlineQRCode);//在线更新捐赠二维码
+    // DownloadOnlineQRCode = QtConcurrent::run(this, &MainWindow::Donate_DownloadOnlineQRCode);//在线更新捐赠二维码 - DISABLED
     SystemShutDown_isAutoShutDown();//上次是否自动关机
     //====================================
     TextBrowser_StartMes();//显示启动msg

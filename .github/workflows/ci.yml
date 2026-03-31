@@ -1,0 +1,39 @@
+name: CI - Quick Build Test
+
+on:
+  push:
+    branches: [ master, main, develop ]
+    paths:
+      - 'SRC_v3.41.01-beta/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'SRC_v3.41.01-beta/**'
+
+jobs:
+  compile-check:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Qt 5.15.2
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '5.15.2'
+        arch: 'win64_mingw81'
+        modules: 'qtmultimedia'
+        cache: true
+        
+    - name: Compile
+      working-directory: SRC_v3.41.01-beta/Waifu2x-Extension-QT
+      run: |
+        qmake Waifu2x-Extension-QT.pro
+        mingw32-make -j2
+      shell: cmd
+      
+    - name: Check executable
+      run: |
+        Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Filter "*.exe" | ForEach-Object { Write-Host "Built: $($_.FullName)" }
+      shell: powershell

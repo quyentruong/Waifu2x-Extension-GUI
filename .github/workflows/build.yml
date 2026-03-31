@@ -1,0 +1,56 @@
+name: Build Waifu2x-Extension-GUI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '5.15.2'
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_mingw81'
+        cache: true
+        modules: 'qtmultimedia'
+        tools: 'tools_mingw,qt.tools.win64_mingw810'
+        
+    - name: Build project
+      shell: cmd
+      working-directory: SRC_v3.41.01-beta/Waifu2x-Extension-QT
+      run: |
+        qmake Waifu2x-Extension-QT.pro
+        mingw32-make -j%NUMBER_OF_PROCESSORS%
+        
+    - name: Prepare artifacts
+      shell: powershell
+      run: |
+        # Find the build directory
+        $buildDir = Get-ChildItem -Path "SRC_v3.41.01-beta" -Recurse -Directory | Where-Object { $_.Name -like "*release*" -or $_.Name -like "*debug*" } | Select-Object -First 1
+        
+        if ($buildDir) {
+          New-Item -ItemType Directory -Force -Path "artifact"
+          Copy-Item -Path "$($buildDir.FullName)\*.exe" -Destination "artifact\" -Force
+          
+          # Deploy Qt dependencies
+          cd artifact
+          windeployqt.exe Waifu2x-Extension-GUI.exe
+        }
+        
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Waifu2x-Extension-GUI-Windows
+        path: artifact/
+        if-no-files-found: warn

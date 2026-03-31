@@ -780,7 +780,7 @@ void MainWindow::Waifu2x_Finished_manual()
     //================= 打开输出文件夹 ====================
     if(ui->checkBox_AutoOpenOutputPath->isChecked()==true && ui->checkBox_OutPath_isEnabled->isChecked()==true)OpenOutputFolder();
     //======================
-    FinishedProcessing_DN();
+    // FinishedProcessing_DN(); // DISABLED - No donate popup
 }
 
 /*
