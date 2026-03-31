@@ -19,6 +19,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+      
     - name: Get version
       id: version
       shell: powershell
@@ -38,7 +43,6 @@ jobs:
         host: 'windows'
         target: 'desktop'
         arch: 'win64_mingw81'
-        tools: 'tools_mingw qt.tools.win64_mingw810'
         cache: true
         
     - name: Build Release
