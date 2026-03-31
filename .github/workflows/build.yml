@@ -71,18 +71,25 @@ jobs:
           # Deploy Qt dependencies
           Write-Host "`nQt installation info:"
           Write-Host "Qt root: $env:Qt5_DIR"
-          Write-Host "PATH contains:"
-          $env:PATH -split ';' | Where-Object { $_ -like "*Qt*" } | ForEach-Object { Write-Host "  $_" }
+          Write-Host "QT_PLUGIN_PATH: $env:QT_PLUGIN_PATH"
           
-          # Change to artifact directory and run windeployqt there
-          Push-Location "artifact"
-          Write-Host "`nRunning windeployqt from artifact directory..."
+          # Get Qt bin directory
+          $qtBin = Split-Path -Parent (Get-Command qmake.exe).Source
+          Write-Host "Qt bin directory: $qtBin"
           
-          # Run windeployqt with proper flags
-          $deployResult = & windeployqt.exe --release --force --compiler-runtime --no-system-d3d-compiler --no-angle --no-opengl-sw Waifu2x-Extension-GUI.exe 2>&1
-          Write-Host $deployResult
+          # Ensure QT_PLUGIN_PATH is set for windeployqt
+          if (-not $env:QT_PLUGIN_PATH) {
+            $pluginPath = Join-Path (Split-Path $qtBin -Parent) "plugins"
+            $env:QT_PLUGIN_PATH = $pluginPath
+            Write-Host "Set QT_PLUGIN_PATH: $pluginPath"
+          }
           
-          Pop-Location
+          # Run windeployqt with absolute path
+          $exePath = Resolve-Path "artifact\Waifu2x-Extension-GUI.exe"
+          Write-Host "`nRunning windeployqt on: $exePath"
+          
+          $windeployqt = Join-Path $qtBin "windeployqt.exe"
+          & $windeployqt --release --force --compiler-runtime --no-system-d3d-compiler --no-angle --no-opengl-sw "$exePath"
           
           Write-Host "`nArtifact contents:"
           Get-ChildItem -Path "artifact" -Recurse | Select-Object -First 50 | ForEach-Object { 
@@ -94,38 +101,63 @@ jobs:
             }
           }
           
-          # Check if essential DLLs are present
+          # Check if essential DLLs and plugins are present
           $requiredDlls = @("Qt5Core.dll", "Qt5Gui.dll", "Qt5Widgets.dll")
-          $missing = @()
+          $missingDlls = @()
           foreach ($dll in $requiredDlls) {
             if (-not (Test-Path "artifact\$dll")) {
-              $missing += $dll
+              $missingDlls += $dll
             }
           }
           
-          if ($missing.Count -gt 0) {
-            Write-Warning "Missing Qt DLLs: $($missing -join ', ')"
-            Write-Host "Attempting manual copy of Qt DLLs..."
+          $pluginOk = Test-Path "artifact\platforms\qwindows.dll"
+          
+          if ($missingDlls.Count -gt 0 -or -not $pluginOk) {
+            Write-Warning "windeployqt did not copy all files. Performing manual copy..."
             
-            # Find Qt bin directory
-            $qtBin = Split-Path -Parent (Get-Command qmake.exe).Source
-            Write-Host "Qt bin directory: $qtBin"
-            
-            # Copy essential DLLs
-            $qtDlls = Get-ChildItem "$qtBin\Qt5*.dll" -ErrorAction SilentlyContinue
-            foreach ($dll in $qtDlls) {
-              Copy-Item $dll.FullName "artifact\" -Force
-              Write-Host "  Copied: $($dll.Name)"
+            # Manual copy Qt DLLs
+            if ($missingDlls.Count -gt 0) {
+              Write-Host "Copying Qt DLLs from $qtBin..."
+              Get-ChildItem "$qtBin\Qt5*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+                Copy-Item $_.FullName "artifact\" -Force
+                Write-Host "  Copied: $($_.Name)"
+              }
+              
+              # Copy MinGW runtime DLLs
+              Get-ChildItem "$qtBin\lib*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+                Copy-Item $_.FullName "artifact\" -Force
+                Write-Host "  Copied: $($_.Name)"
+              }
             }
             
-            # Copy platforms plugin
-            New-Item -ItemType Directory -Force -Path "artifact\platforms" | Out-Null
-            if (Test-Path "$qtBin\..\plugins\platforms\qwindows.dll") {
-              Copy-Item "$qtBin\..\plugins\platforms\qwindows.dll" "artifact\platforms\" -Force
+            # Manual copy plugins
+            if (-not $pluginOk) {
+              Write-Host "Copying Qt plugins..."
+              $qtRoot = Split-Path $qtBin -Parent
+              $pluginSrc = Join-Path $qtRoot "plugins"
+              
+              # Copy platform plugin (mandatory)
+              $platformDir = "artifact\platforms"
+              New-Item -ItemType Directory -Force -Path $platformDir | Out-Null
+              Copy-Item "$pluginSrc\platforms\qwindows.dll" $platformDir -Force -ErrorAction SilentlyContinue
               Write-Host "  Copied: platforms\qwindows.dll"
+              
+              # Copy other useful plugins
+              $optionalPlugins = @("imageformats", "multimedia", "mediaservice", "audio")
+              foreach ($pluginType in $optionalPlugins) {
+                $srcPath = Join-Path $pluginSrc $pluginType
+                if (Test-Path $srcPath) {
+                  $destPath = "artifact\$pluginType"
+                  New-Item -ItemType Directory -Force -Path $destPath | Out-Null
+                  Get-ChildItem "$srcPath\*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+                    Copy-Item $_.FullName $destPath -Force
+                  }
+                  Write-Host "  Copied plugins: $pluginType"
+                }
+              }
             }
           } else {
-            Write-Host "All essential Qt DLLs are present!"
+            Write-Host "✓ All essential Qt files deployed successfully!"
           }
         } else {
           Write-Error "Waifu2x-Extension-GUI.exe not found!"

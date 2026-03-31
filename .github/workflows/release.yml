@@ -80,53 +80,74 @@ jobs:
           
           # Deploy Qt dependencies
           Write-Host "Running windeployqt..."
-          Push-Location "release-package"
           
-          $deployResult = & windeployqt.exe --release --force --compiler-runtime --no-system-d3d-compiler --no-angle --no-opengl-sw Waifu2x-Extension-GUI.exe 2>&1
-          Write-Host $deployResult
+          # Get Qt paths
+          $qtBin = Split-Path -Parent (Get-Command qmake.exe).Source
+          $qtRoot = Split-Path $qtBin -Parent
           
-          Pop-Location
+          # Ensure QT_PLUGIN_PATH is set
+          if (-not $env:QT_PLUGIN_PATH) {
+            $env:QT_PLUGIN_PATH = Join-Path $qtRoot "plugins"
+          }
           
-          # Verify Qt DLLs were deployed
+          # Run windeployqt with absolute path
+          $targetExe = Resolve-Path "release-package\Waifu2x-Extension-GUI.exe"
+          $windeployqt = Join-Path $qtBin "windeployqt.exe"
+          & $windeployqt --release --force --compiler-runtime --no-system-d3d-compiler --no-angle --no-opengl-sw "$targetExe"
+          
+          # Verify Qt deployment
           $requiredDlls = @("Qt5Core.dll", "Qt5Gui.dll", "Qt5Widgets.dll")
-          $missing = @()
+          $missingDlls = @()
           foreach ($dll in $requiredDlls) {
             if (-not (Test-Path "release-package\$dll")) {
-              $missing += $dll
+              $missingDlls += $dll
             }
           }
           
-          if ($missing.Count -gt 0) {
-            Write-Warning "Missing Qt DLLs: $($missing -join ', '), performing manual copy..."
-            
-            # Find Qt bin directory
-            $qtBin = Split-Path -Parent (Get-Command qmake.exe).Source
-            Write-Host "Qt bin directory: $qtBin"
+          $pluginOk = Test-Path "release-package\platforms\qwindows.dll"
+          
+          if ($missingDlls.Count -gt 0 -or -not $pluginOk) {
+            Write-Warning "windeployqt incomplete. Performing manual copy..."
             
             # Copy Qt DLLs
-            Get-ChildItem "$qtBin\Qt5*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
-              Copy-Item $_.FullName "release-package\" -Force
-              Write-Host "  Copied: $($_.Name)"
-            }
-            
-            # Copy platforms plugin
-            New-Item -ItemType Directory -Force -Path "release-package\platforms" | Out-Null
-            if (Test-Path "$qtBin\..\plugins\platforms\qwindows.dll") {
-              Copy-Item "$qtBin\..\plugins\platforms\qwindows.dll" "release-package\platforms\" -Force
-              Write-Host "  Copied: platforms\qwindows.dll"
-            }
-            
-            # Copy other essential plugins
-            $pluginDirs = @("platforms", "imageformats", "multimedia", "audio")
-            foreach ($pluginDir in $pluginDirs) {
-              $srcPath = "$qtBin\..\plugins\$pluginDir"
-              if (Test-Path $srcPath) {
-                $destPath = "release-package\$pluginDir"
-                New-Item -ItemType Directory -Force -Path $destPath | Out-Null
-                Copy-Item "$srcPath\*.dll" $destPath -Force -ErrorAction SilentlyContinue
-                Write-Host "  Copied plugins from: $pluginDir"
+            if ($missingDlls.Count -gt 0) {
+              Get-ChildItem "$qtBin\Qt5*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+                Copy-Item $_.FullName "release-package\" -Force
+                Write-Host "  Copied: $($_.Name)"
+              }
+              
+              # Copy MinGW runtime
+              Get-ChildItem "$qtBin\lib*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+                Copy-Item $_.FullName "release-package\" -Force
+                Write-Host "  Copied: $($_.Name)"
               }
             }
+            
+            # Copy plugins
+            if (-not $pluginOk) {
+              $pluginSrc = Join-Path $qtRoot "plugins"
+              
+              # Platform plugin (mandatory)
+              New-Item -ItemType Directory -Force -Path "release-package\platforms" | Out-Null
+              Copy-Item "$pluginSrc\platforms\qwindows.dll" "release-package\platforms\" -Force -ErrorAction SilentlyContinue
+              Write-Host "  Copied: platforms\qwindows.dll"
+              
+              # Optional plugins
+              $pluginTypes = @("imageformats", "multimedia", "mediaservice", "audio")
+              foreach ($type in $pluginTypes) {
+                $srcPath = Join-Path $pluginSrc $type
+                if (Test-Path $srcPath) {
+                  $destPath = "release-package\$type"
+                  New-Item -ItemType Directory -Force -Path $destPath | Out-Null
+                  Get-ChildItem "$srcPath\*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+                    Copy-Item $_.FullName $destPath -Force
+                  }
+                  Write-Host "  Copied plugins: $type"
+                }
+              }
+            }
+          } else {
+            Write-Host "✓ All Qt files deployed successfully!"
           }
           
           # Copy README and LICENSE
