@@ -80,8 +80,54 @@ jobs:
           
           # Deploy Qt dependencies
           Write-Host "Running windeployqt..."
-          $targetExe = "release-package\Waifu2x-Extension-GUI.exe"
-          & windeployqt.exe --release --force --compiler-runtime --no-translations $targetExe
+          Push-Location "release-package"
+          
+          $deployResult = & windeployqt.exe --release --force --compiler-runtime --no-system-d3d-compiler --no-angle --no-opengl-sw Waifu2x-Extension-GUI.exe 2>&1
+          Write-Host $deployResult
+          
+          Pop-Location
+          
+          # Verify Qt DLLs were deployed
+          $requiredDlls = @("Qt5Core.dll", "Qt5Gui.dll", "Qt5Widgets.dll")
+          $missing = @()
+          foreach ($dll in $requiredDlls) {
+            if (-not (Test-Path "release-package\$dll")) {
+              $missing += $dll
+            }
+          }
+          
+          if ($missing.Count -gt 0) {
+            Write-Warning "Missing Qt DLLs: $($missing -join ', '), performing manual copy..."
+            
+            # Find Qt bin directory
+            $qtBin = Split-Path -Parent (Get-Command qmake.exe).Source
+            Write-Host "Qt bin directory: $qtBin"
+            
+            # Copy Qt DLLs
+            Get-ChildItem "$qtBin\Qt5*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+              Copy-Item $_.FullName "release-package\" -Force
+              Write-Host "  Copied: $($_.Name)"
+            }
+            
+            # Copy platforms plugin
+            New-Item -ItemType Directory -Force -Path "release-package\platforms" | Out-Null
+            if (Test-Path "$qtBin\..\plugins\platforms\qwindows.dll") {
+              Copy-Item "$qtBin\..\plugins\platforms\qwindows.dll" "release-package\platforms\" -Force
+              Write-Host "  Copied: platforms\qwindows.dll"
+            }
+            
+            # Copy other essential plugins
+            $pluginDirs = @("platforms", "imageformats", "multimedia", "audio")
+            foreach ($pluginDir in $pluginDirs) {
+              $srcPath = "$qtBin\..\plugins\$pluginDir"
+              if (Test-Path $srcPath) {
+                $destPath = "release-package\$pluginDir"
+                New-Item -ItemType Directory -Force -Path $destPath | Out-Null
+                Copy-Item "$srcPath\*.dll" $destPath -Force -ErrorAction SilentlyContinue
+                Write-Host "  Copied plugins from: $pluginDir"
+              }
+            }
+          }
           
           # Copy README and LICENSE
           if (Test-Path "README.md") { Copy-Item "README.md" "release-package\" }
